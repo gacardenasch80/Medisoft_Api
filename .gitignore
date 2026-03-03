@@ -1,0 +1,15 @@
+# Ignorar la carpeta Database que contiene la base de datos local
+/src/MedisoftAPI.WebAPI/Database/
+
+# Visual Studio / .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Rider
+.idea/
+
+# Visual Studio Code
+.vscode/
