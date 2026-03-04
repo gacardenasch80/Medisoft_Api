@@ -133,6 +133,54 @@ El endpoint `/paciente/{id}` retorna `AdadmipaciDetalleDto[]` con los objetos
 
 ---
 
+### Citas Pacientes — `/api/CitasPacientes` (BD: `FoxPro_Cit` → citas.dbc)
+| Método | Ruta                            | Descripción                                           |
+|--------|---------------------------------|------------------------------------------------------|
+| `GET`  | `/`                             | Listar citas (paginado)                               |
+| `GET`  | `/{adcitacons}`                 | Obtener cita por consecutivo                          |
+| `GET`  | `/paciente/{adpaciiden}`        | Citas enriquecidas del paciente (Contrato + Administ.)|
+| `POST` | `/desde-disponibilidad`         | Crear cita desde una disponibilidad médica            |
+
+El endpoint `/paciente/{id}` retorna `AdcitasDetalleDto[]` con los objetos
+`Ctcontrato` y `Ctadminist` incluidos en paralelo (`Task.WhenAll`).
+
+El endpoint `POST /desde-disponibilidad` replica la lógica del sistema legado:
+1. Busca el `Addispmed` por `Addispcons` → toma médico, especialidad, servicio y horario
+2. Busca el `Adadmipaci` por `Adadpacons` → toma `Ctadmicodi` y `Ctcontcodi`
+3. Genera el consecutivo automáticamente desde la tabla `Consecutivos`
+4. Inserta la cita y marca `Addispcita = true` en la disponibilidad
+
+**Filtros GET `/api/CitasPacientes`:**
+```
+?Adcitacons=00000001
+?Geespecodi=01
+?Gemedicodi=0001
+?Faservcodi=0000001
+?Adpaciiden=12345678
+?Adconscodi=001
+?Adfechcita=2024-06-15
+?Ctadmicodi=001
+?Ctcontcodi=A0001
+?Adingrcons=001
+?Pagina=1&TamPagina=50
+```
+
+**Body POST `/api/CitasPacientes/desde-disponibilidad`:**
+```json
+{
+  "addispcons": "00001234",
+  "adadpacons": "00005678",
+  "adpaciiden": "1234567890",
+  "faprogcodi": "PYP",
+  "tabla": "ADCITAS"
+}
+```
+
+> **Nota VFP:** Los campos `FECHALLEG` y `ADCITAFEAN` son `Date NOT NULL` en FoxPro.
+> Cuando no tienen valor se insertan como `{ / / }` (fecha vacía nativa de VFP), nunca como `NULL`.
+
+---
+
 ### Administradoras — `/api/Administradoras` (BD: `FoxPro_Con` → contratacion.dbc)
 | Método | Ruta              | Descripción                        |
 |--------|-------------------|------------------------------------|
@@ -180,6 +228,7 @@ El endpoint `/paciente/{id}` retorna `AdadmipaciDetalleDto[]` con los objetos
 | `GET`  | `/{consecutivo}`  | Obtener por consecutivo (Addispcons) |
 
 > Solo devuelve registros con `addispplan = .T. AND addispcita = .F.`
+> Una vez creada la cita desde este registro, `addispcita` pasa a `.T.` automáticamente.
 
 **Filtros GET `/api/Disponibilidad`:**
 ```
@@ -246,6 +295,7 @@ El endpoint `/paciente/{id}` retorna `AdadmipaciDetalleDto[]` con los objetos
 |---------------|-----------------|-----------------|------------------------|
 | `Adpaciente`  | Adpaciente      | FoxPro_Adm      | ADPACIIDEN (20)        |
 | `Adadmipaci`  | ADADMIPACI.DBF  | FoxPro_Adm      | ADADPACONS (8)         |
+| `Adcitas`     | Adcitas         | FoxPro_Cit      | Adcitacons (8)         |
 | `Addispmed`   | Addispmed       | FoxPro_Cit      | Addispcons             |
 | `Ctadminist`  | Ctadminist      | FoxPro_Con      | CTADMICODI (3)         |
 | `Ctcontrato`  | Ctcontrato      | FoxPro_Con      | CTCONTCODI (5)         |
@@ -259,13 +309,21 @@ El endpoint `/paciente/{id}` retorna `AdadmipaciDetalleDto[]` con los objetos
 |--------------------------|----------------|-------------------------|
 | `AdpacienteRepository`   | FoxPro_Adm     | `r["campo"] as string`  |
 | `AdadmipaciRepository`   | FoxPro_Adm     | SafeInt / SafeDate      |
+| `AdcitasRepository`      | FoxPro_Cit     | SafeString / SafeDate / SafeInt (ordinal) |
 | `AddispmedRepository`    | FoxPro_Cit     | `r["campo"] as string`  |
 | `CtadministRepository`   | FoxPro_Con     | `r["campo"] as string`  |
 | `CtcontratoRepository`   | FoxPro_Con     | SafeDouble / SafeInt ⚠️ |
 | `FaservicioRepository`   | FoxPro_Fac     | Convert.ToInt32         |
 | `GeespecialRepository`   | FoxPro_Gen     | Convert.ToInt32         |
 | `GemedicosRepository`    | FoxPro_Gen     | Convert.ToInt32         |
+| `ConsecutivosRepository` | FoxPro_Adm     | Genera y actualiza consecutivos |
 | `UserRepository`         | SQLite         | EF Core                 |
+
+### Application — Servicios con dependencias cruzadas
+| Servicio           | Dependencias adicionales                                        | Método especial                    |
+|--------------------|----------------------------------------------------------------|------------------------------------|
+| `AdadmipaciService`| `ICtcontratoRepository`, `ICtadministRepository`               | `GetByPacienteAsync` (Task.WhenAll)|
+| `AdcitasService`   | `ICtcontratoRepository`, `ICtadministRepository`, `IAddispmedRepository`, `IAdadmipaciRepository`, `IConsecutivosRepository` | `GetByPacienteAsync`, `CreateFromDispmedAsync` |
 
 ---
 
@@ -314,7 +372,7 @@ public class XxtablaFilter
     public int Pagina    { get; set; } = 1;
     public int TamPagina { get; set; } = 50;
     public string?   CAMPOCLAVE  { get; set; }
-    public string?   CAMPOBUSCAR { get; set; }  // búsqueda parcial LIKE
+    public string?   CAMPOBUSCAR { get; set; }
     public int?      CAMPOESTADO { get; set; }
     public DateTime? FechaInicio { get; set; }
     public DateTime? FechaFin    { get; set; }
@@ -356,28 +414,12 @@ public class XxtablaService : IXxtablaService
 {
     private readonly IXxtablaRepository _repo;
     public XxtablaService(IXxtablaRepository repo) => _repo = repo;
-
-    public async Task<PagedResult<XxtablaDto>> GetAllAsync(XxtablaQueryDto query)
-    {
-        var filter = new XxtablaFilter
-        {
-            CAMPOCLAVE  = query.CAMPOCLAVE,
-            FechaInicio = query.FechaInicio,
-            FechaFin    = query.FechaFin,
-            Pagina      = query.Pagina    < 1   ? 1   : query.Pagina,
-            TamPagina   = query.TamPagina < 1   ? 50  :
-                          query.TamPagina > 200 ? 200 : query.TamPagina
-        };
-        var (items, total) = await _repo.GetAllAsync(filter);
-        return new PagedResult<XxtablaDto>
-        {
-            Items = items.Select(ToDto), Pagina = filter.Pagina,
-            TamPagina = filter.TamPagina, TotalItems = total
-        };
-    }
-    // ... GetByCode, Create, Update, Delete + Mappers (ToDto, FromCreate, ApplyUpdate)
+    // ... GetAllAsync, GetByCodeAsync, CreateAsync, UpdateAsync, DeleteAsync + mappers
 }
 ```
+
+> Si el servicio necesita cruzar datos con otras tablas (como `AdcitasService`),
+> inyectar los repositorios adicionales en el constructor y usar `Task.WhenAll` para cargas en paralelo.
 
 ---
 
@@ -393,84 +435,35 @@ public class XxtablaRepository : IXxtablaRepository
 
     public XxtablaRepository(IConfiguration cfg)
     {
-        _conn = cfg.GetConnectionString("FoxPro_XXX")   // ← elegir la BD correcta
+        _conn = cfg.GetConnectionString("FoxPro_XXX")
             ?? throw new InvalidOperationException("Cadena 'FoxPro_XXX' no configurada.");
     }
 
     // ── Safe helpers OBLIGATORIOS para campos Numeric ─────────────────────
-    // ⚠️ VFP/OleDb lanza InvalidOperationException al leer Numeric con r["campo"]
-    //    aunque el valor no sea null. SIEMPRE usar ordinal + IsDBNull.
-    private static double? SafeDouble(IDataRecord r, int i)
-    {
-        try { return r.IsDBNull(i) ? null : r.GetDouble(i); }
-        catch { return null; }
-    }
-    private static int? SafeInt(IDataRecord r, int i)
-    {
-        try { return r.IsDBNull(i) ? null : (int?)Convert.ToInt32(r.GetValue(i)); }
-        catch { return null; }
-    }
-    private static DateTime? SafeDate(IDataRecord r, int i)
-    {
-        try { return r.IsDBNull(i) ? null : (DateTime?)Convert.ToDateTime(r.GetValue(i)); }
-        catch { return null; }
-    }
-    private static string? SafeString(IDataRecord r, int i)
-    {
-        try { return r.IsDBNull(i) ? null : r.GetString(i); }
-        catch { return null; }
-    }
+    private static double?   SafeDouble(IDataRecord r, int i) { try { return r.IsDBNull(i) ? null : r.GetDouble(i); }                          catch { return null; } }
+    private static int?      SafeInt   (IDataRecord r, int i) { try { return r.IsDBNull(i) ? null : (int?)Convert.ToInt32(r.GetValue(i)); }    catch { return null; } }
+    private static DateTime? SafeDate  (IDataRecord r, int i) { try { return r.IsDBNull(i) ? null : (DateTime?)Convert.ToDateTime(r.GetValue(i)); } catch { return null; } }
+    private static string    SafeString(IDataRecord r, int i) { try { return r.IsDBNull(i) ? string.Empty : r.GetString(i).TrimEnd(); }        catch { return string.Empty; } }
 
-    // ── MapRow con índices ordinales — COMENTAR el orden ─────────────────
-    private static Xxtabla MapRow(IDataRecord r)
+    private static Xxtabla MapRow(IDataRecord r) => new()
     {
-        // 0:CAMPOCLAVE  1:CAMPO2  2:CAMPONUMERIC  3:CAMPOVALOR  4:CAMPOFECHA
-        return new Xxtabla
-        {
-            CAMPOCLAVE   = SafeString(r, 0),
-            CAMPO2       = SafeString(r, 1),
-            CAMPONUMERIC = SafeInt(r,    2),
-            CAMPOVALOR   = SafeDouble(r, 3),
-            CAMPOFECHA   = SafeDate(r,   4),
-        };
-    }
+        // comentar índices: 0:CAMPOCLAVE 1:CAMPO2 ...
+        CAMPOCLAVE   = SafeString(r, 0),
+        CAMPO2       = SafeString(r, 1),
+        CAMPONUMERIC = SafeInt(r,    2),
+        CAMPOVALOR   = SafeDouble(r, 3),
+        CAMPOFECHA   = SafeDate(r,   4),
+    };
 
     private static string SelectColumns() =>
         "CAMPOCLAVE, CAMPO2, CAMPONUMERIC, CAMPOVALOR, CAMPOFECHA";
-
-    // ── BuildWhere — fechas Date usan CTOD(), NO parámetros ? ────────────
-    private static (string Where, object[] Values) BuildWhere(XxtablaFilter f)
-    {
-        var sb = new StringBuilder("WHERE 1=1");
-        var v  = new List<object>();
-
-        if (!string.IsNullOrWhiteSpace(f.CAMPOCLAVE))
-        { sb.Append(" AND ALLTRIM(CAMPOCLAVE) = ?"); v.Add(f.CAMPOCLAVE.Trim()); }
-
-        if (!string.IsNullOrWhiteSpace(f.CAMPOBUSCAR))
-        { sb.Append(" AND UPPER(ALLTRIM(CAMPO2)) LIKE ?"); v.Add($"%{f.CAMPOBUSCAR.ToUpper().Trim()}%"); }
-
-        if (f.CAMPOESTADO.HasValue)
-        { sb.Append(" AND CAMPOESTADO = ?"); v.Add(f.CAMPOESTADO.Value); }
-
-        // Fechas Date → CTOD(), NO usar ? como parámetro
-        if (f.FechaInicio.HasValue)
-            sb.Append($" AND CAMPOFECHA >= CTOD('{f.FechaInicio.Value:MM/dd/yyyy}')");
-        if (f.FechaFin.HasValue)
-            sb.Append($" AND CAMPOFECHA <= CTOD('{f.FechaFin.Value:MM/dd/yyyy}')");
-
-        return (sb.ToString(), v.ToArray());
-    }
-
-    // ... GetAllAsync, GetByCodeAsync, CreateAsync, UpdateAsync, DeleteAsync
-    // ... (mismo patrón que los repositorios existentes)
 }
 ```
 
-> **Regla de fechas:**
-> - Campo `Date` en filtro → `CTOD('MM/dd/yyyy')` inyectado como string literal
-> - Campo `DateTime` en filtro → parámetro `?` normal
-> - **Nunca** usar `?` con `CTOD()` — VFP no acepta DateTime como parámetro en ese contexto
+> **Regla de fechas en INSERT/UPDATE:**
+> - Fechas `Date NOT NULL` → inyectar con `CTOD('MM/dd/yyyy')` o `{ / / }` si es null
+> - Nunca pasar `DBNull.Value` a un campo `Date NOT NULL` en VFP — lanza `OleDbException`
+> - Fechas opcionales nulas → `{ / / }` (fecha vacía nativa de VFP)
 
 ---
 
@@ -508,7 +501,6 @@ public class XxtablaController : ControllerBase
 
 ### 8. Program.cs — Registrar DI
 ```csharp
-// En Program.cs, sección "── 2. Repositorios y servicios ──"
 builder.Services.AddScoped<IXxtablaRepository, XxtablaRepository>();
 builder.Services.AddScoped<IXxtablaService,    XxtablaService>();
 ```
@@ -521,10 +513,12 @@ builder.Services.AddScoped<IXxtablaService,    XxtablaService>();
 |-------|-------|---------|
 | `InvalidOperationException: The provider could not determine the Decimal value` | Acceder campo Numeric con `r["campo"]` | Usar `SafeDouble(r, ordinal)` o `SafeInt(r, ordinal)` |
 | `OleDbException: Multiple-step OLE DB operation generated errors` | Tipo C# no compatible con columna VFP | Verificar tipos — Numeric grande → `double?`, no `decimal?` |
+| `OleDbException: Field FECHALLEG does not accept null values` | Campo `Date NOT NULL` recibe `DBNull` | Inyectar `{ / / }` para fecha vacía o `CTOD('MM/dd/yyyy')` para fecha con valor |
 | `The parameter is already contained...` | Reutilizar `OleDbParameter` en 2 comandos | Llamar `MakeParams()` en cada comando — nunca reutilizar |
 | `CTOD()` no funciona con `?` | VFP no acepta `DateTime` como parámetro en CTOD | Inyectar fecha como string: `CTOD('{fecha:MM/dd/yyyy}')` |
 | `BadImageFormatException` o `PlatformTarget` | VFPOLEDB 32-bit en proceso 64-bit | Verificar `<PlatformTarget>x86</PlatformTarget>` en ambos `.csproj` |
 | `Unable to open database file` | SQLite: carpeta `Database/` no existe | Program.cs crea la carpeta automáticamente en el arranque |
+| `NullReferenceException` en servicio | Dependencia no asignada en constructor | Verificar que TODOS los parámetros del constructor se asignan a su campo `_campo` |
 
 ---
 
