@@ -1,5 +1,6 @@
 ﻿using MedisoftAPI.Application.DTOs;
-using MedisoftAPI.Application.Interfaces;
+using MedisoftAPI.Application.DTOs.Facturacion;
+using MedisoftAPI.Application.Interfaces.Facturacion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
