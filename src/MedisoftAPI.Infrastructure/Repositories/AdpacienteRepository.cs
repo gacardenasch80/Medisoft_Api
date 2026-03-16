@@ -95,6 +95,20 @@ public class AdpacienteRepository : IAdpacienteRepository
         return items.FirstOrDefault();
     }
 
+    public async Task<Adpaciente?> GetByCelularAsync(string adpacicelu)
+    {
+        var sql = $@"
+        SELECT {SelectColumns()}
+        FROM   Adpaciente
+        WHERE  (ALLTRIM(adpacicelu) = ? OR ALLTRIM(ADPACITELE) = ?) ";
+
+        using var conn = new OleDbConnection(_conn);
+        await conn.OpenAsync();
+
+        var items = await QueryAsync(conn, sql, MakeParams([adpacicelu.Trim(), adpacicelu.Trim()]));
+        return items.FirstOrDefault();
+    }
+
     // ── CREATE ────────────────────────────────────────────────────────────
 
     public async Task<Adpaciente> CreateAsync(Adpaciente e)
@@ -208,6 +222,11 @@ public class AdpacienteRepository : IAdpacienteRepository
         {
             sb.Append(" AND UPPER(ALLTRIM(ADPACINOM2)) LIKE ?");
             values.Add($"%{f.ADPACINOM2.ToUpper().Trim()}%");
+        }
+        if (!string.IsNullOrWhiteSpace(f.ADPACICELU))
+        {
+            sb.Append(" AND ALLTRIM(ADPACICELU) = ?");
+            values.Add(f.ADPACICELU.Trim());
         }
         //if (!string.IsNullOrWhiteSpace(f.ADESTACODI))
         //{

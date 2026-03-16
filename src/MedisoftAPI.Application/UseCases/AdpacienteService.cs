@@ -23,6 +23,7 @@ public class AdpacienteService : IAdpacienteService
             ADPACIAPE2 = query.ADPACIAPE2,
             ADPACINOM1 = query.ADPACINOM1,
             ADPACINOM2 = query.ADPACINOM2,
+            ADPACICELU = query.ADPACICELU,
             Pagina = query.Pagina < 1 ? 1 : query.Pagina,
             TamPagina = query.TamPagina < 1 ? 50 :
                          query.TamPagina > 200 ? 200 : query.TamPagina
@@ -44,6 +45,12 @@ public class AdpacienteService : IAdpacienteService
     public async Task<AdpacienteDto?> GetByCodeAsync(string identificacion)
     {
         var e = await _repo.GetByCodeAsync(identificacion);
+        return e is null ? null : ToDto(e);
+    }
+
+    public async Task<AdpacienteDto?> GetByCelularAsync(string celular)
+    {
+        var e = await _repo.GetByCelularAsync(celular);
         return e is null ? null : ToDto(e);
     }
 

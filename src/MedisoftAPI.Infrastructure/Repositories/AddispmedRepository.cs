@@ -55,7 +55,7 @@ public class AddispmedRepository : IAddispmedRepository
                 SELECT TOP {tamPagina} {SelectColumns()}
                 FROM   Addispmed
                 {where}
-                ORDER BY Addispcons DESC";
+                ORDER BY Addispcons ASC";
             queryValues = paramValues;
         }
         else
@@ -68,9 +68,9 @@ public class AddispmedRepository : IAddispmedRepository
                            SELECT TOP {offset} Addispcons
                            FROM   Addispmed
                            {where}
-                           ORDER BY Addispcons DESC
+                           ORDER BY Addispcons ASC
                        )
-                ORDER BY Addispcons DESC";
+                ORDER BY Addispcons ASC";
             queryValues = [.. paramValues, .. paramValues];
         }
 

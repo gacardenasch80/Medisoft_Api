@@ -18,7 +18,7 @@ public class PacientesController : ControllerBase
     /// <summary>
     /// Listar pacientes con paginación.
     /// Por defecto devuelve 50 registros por página.
-    /// Parámetros opcionales: ADTIIDCODI, ADPACIIDEN, ADPACIAPE1, ADPACIAPE2, ADPACINOM1, ADPACINOM2, Pagina, TamPagina (máx 200)
+    /// Parámetros opcionales: ADTIIDCODI, ADPACIIDEN, ADPACIAPE1, ADPACIAPE2, ADPACINOM1, ADPACINOM2, ADPACICELU, Pagina, TamPagina (máx 200)
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<PagedResult<AdpacienteDto>>), StatusCodes.Status200OK)]
@@ -37,6 +37,16 @@ public class PacientesController : ControllerBase
     {
         var item = await _service.GetByCodeAsync(identificacion);
         if (item is null) return NotFound(ApiResponse<string>.Fail($"Paciente '{identificacion}' no encontrado."));
+        return Ok(ApiResponse<AdpacienteDto>.Ok(item));
+    }
+
+    [HttpGet("celular/{celular}")]
+    [ProducesResponseType(typeof(ApiResponse<AdpacienteDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetByCelular(string celular)
+    {
+        var item = await _service.GetByCelularAsync(celular);
+        if (item is null) return NotFound(ApiResponse<string>.Fail($"Paciente con celular '{celular}' no encontrado."));
         return Ok(ApiResponse<AdpacienteDto>.Ok(item));
     }
 

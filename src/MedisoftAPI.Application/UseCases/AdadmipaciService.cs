@@ -10,15 +10,18 @@ public class AdadmipaciService : IAdadmipaciService
     private readonly IAdadmipaciRepository _repo;
     private readonly ICtcontratoRepository _repoContrato;
     private readonly ICtadministRepository _repoAdminist;
+    private readonly IAdpacienteRepository _repoPaciente;
 
     public AdadmipaciService(
         IAdadmipaciRepository repo,
         ICtcontratoRepository repoContrato,
-        ICtadministRepository repoAdminist)
+        ICtadministRepository repoAdminist,
+        IAdpacienteRepository repoPaciente)
     {
         _repo = repo;
         _repoContrato = repoContrato;
         _repoAdminist = repoAdminist;
+        _repoPaciente = repoPaciente;
     }
 
     public async Task<PagedResult<AdadmipaciDto>> GetAllAsync(AdadmipaciQueryDto query)
@@ -75,6 +78,48 @@ public class AdadmipaciService : IAdadmipaciService
 
     public async Task<IEnumerable<AdadmipaciDetalleDto>> GetByPacienteAsync(string adpaciiden)
     {
+        // 1. Traer todas las admisiones del paciente
+        var filter = new AdadmipaciFilter
+        {
+            ADPACIIDEN = adpaciiden.Trim(),
+            Pagina = 1,
+            TamPagina = 200
+        };
+
+        var (admisiones, _) = await _repo.GetAllAsync(filter);
+
+        // 2. Para cada admisión buscar contrato y administradora en paralelo
+        var tareas = admisiones.Select(async admision =>
+        {
+            var contratoTask = string.IsNullOrWhiteSpace(admision.CTCONTCODI)
+                ? Task.FromResult<Ctcontrato?>(null)
+                : _repoContrato.GetByCodeAsync(admision.CTCONTCODI);
+
+            var administTask = string.IsNullOrWhiteSpace(admision.CTADMICODI)
+                ? Task.FromResult<Ctadminist?>(null)
+                : _repoAdminist.GetByCodeAsync(admision.CTADMICODI);
+
+            await Task.WhenAll(contratoTask, administTask);
+
+            return new AdadmipaciDetalleDto
+            {
+                Admision = ToDto(admision),
+                Contrato = contratoTask.Result is null ? null : ToContratoDto(contratoTask.Result),
+                Administradora = administTask.Result is null ? null : ToAdministDto(administTask.Result),
+            };
+        });
+
+        return await Task.WhenAll(tareas);
+    }
+
+    public async Task<IEnumerable<AdadmipaciDetalleDto>> GetByPacienteCelularAsync(string celular)
+    {
+        var paciente = await _repoPaciente.GetByCelularAsync(celular);
+        if (paciente is null)
+            throw new KeyNotFoundException(
+                $"Paciente con celular '{celular}' no encontrado."); 
+
+        string adpaciiden = paciente.ADPACIIDEN;
         // 1. Traer todas las admisiones del paciente
         var filter = new AdadmipaciFilter
         {

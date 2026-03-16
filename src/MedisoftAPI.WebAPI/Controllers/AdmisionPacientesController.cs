@@ -44,8 +44,8 @@ public class AdmisionPacientesController : ControllerBase
     }
 
     /// <summary>
-    /// Obtener todas las admisiones de un paciente con contrato y administradora incluidos.
-    /// Retorna lista de admisiones enriquecidas con los objetos Ctcontrato y Ctadminist.
+    /// Obtener todas las admisiones de un paciente por número de identificación,
+    /// con contrato y administradora incluidos (Ctcontrato + Ctadminist en paralelo).
     /// </summary>
     [HttpGet("paciente/{adpaciiden}")]
     [ProducesResponseType(typeof(ApiResponse<IEnumerable<AdadmipaciDetalleDto>>), StatusCodes.Status200OK)]
@@ -58,6 +58,24 @@ public class AdmisionPacientesController : ControllerBase
                 $"No se encontraron admisiones para el paciente '{adpaciiden}'."));
         return Ok(ApiResponse<IEnumerable<AdadmipaciDetalleDto>>.Ok(items,
             $"{items.Count()} admisión(es) encontrada(s) para el paciente '{adpaciiden}'."));
+    }
+
+    /// <summary>
+    /// Obtener todas las admisiones de un paciente por número de celular,
+    /// con contrato y administradora incluidos (Ctcontrato + Ctadminist en paralelo).
+    /// Primero busca al paciente por celular y luego trae sus admisiones.
+    /// </summary>
+    [HttpGet("paciente/celular/{celular}")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<AdadmipaciDetalleDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetByPacienteCelular(string celular)
+    {
+        var items = await _service.GetByPacienteCelularAsync(celular);
+        if (!items.Any())
+            return NotFound(ApiResponse<string>.Fail(
+                $"No se encontraron admisiones para el celular '{celular}'."));
+        return Ok(ApiResponse<IEnumerable<AdadmipaciDetalleDto>>.Ok(items,
+            $"{items.Count()} admisión(es) encontrada(s) para el celular '{celular}'."));
     }
 
     /// <summary>Crear nueva admisión (solo Admin)</summary>

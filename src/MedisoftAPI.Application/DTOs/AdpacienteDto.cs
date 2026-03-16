@@ -149,15 +149,15 @@ public class UpdateAdpacienteDto
 }
 public class AdpacienteQueryDto
 {
+    // Paginación
+    public int Pagina { get; set; } = 1;
+    public int TamPagina { get; set; } = 50;   // 50 registros por defecto
     public string? ADTIIDCODI { get; set; }
     public string? ADPACIIDEN { get; set; }
     public string? ADPACIAPE1 { get; set; }
     public string? ADPACIAPE2 { get; set; }
     public string? ADPACINOM1 { get; set; }
     public string? ADPACINOM2 { get; set; }
-
-    // Paginación
-    public int Pagina { get; set; } = 1;
-    public int TamPagina { get; set; } = 50;   // 50 registros por defecto
+    public string? ADPACICELU { get; set; }
 }
 
