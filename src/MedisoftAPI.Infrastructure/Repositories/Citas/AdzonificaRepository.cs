@@ -1,33 +1,33 @@
 ﻿using System.Data;
 using System.Data.OleDb;
 using System.Text;
-using MedisoftAPI.Domain.Entities.Generales;
-using MedisoftAPI.Domain.Interfaces.Generales;
+using MedisoftAPI.Domain.Entities.Citas;
+using MedisoftAPI.Domain.Interfaces.Citas;
 using Microsoft.Extensions.Configuration;
 
-namespace MedisoftAPI.Infrastructure.Repositories.Generales;
+namespace MedisoftAPI.Infrastructure.Repositories.Citas;
 
 /// <summary>
-/// Repositorio de Geespecial — tabla: Geespecial (generales.dbc)
+/// Repositorio de Adzonifica — tabla: Adzonifica (citas.dbc)
 ///
 /// ⚠️ VFP/OleDb NO soporta parámetros nombrados (@param).
 ///    Se usan ? posicionales y ADO.NET directo.
-///    Los campos Numeric se leen con IsDBNull(ordinal) — SafeInt por ordinal.
+///    La clave primaria es compuesta: Adpaciiden + Geunprcodi.
 /// </summary>
-public class GeespecialRepository : IGeespecialRepository
+public class AdzonificaRepository : IAdzonificaRepository
 {
     private readonly string _conn;
 
-    public GeespecialRepository(IConfiguration cfg)
+    public AdzonificaRepository(IConfiguration cfg)
     {
-        _conn = cfg.GetConnectionString("FoxPro_Gen")
+        _conn = cfg.GetConnectionString("FoxPro_Cit")
             ?? throw new InvalidOperationException(
-                "La cadena 'FoxPro_Gen' no está configurada en appsettings.json.");
+                "La cadena 'FoxPro_Cit' no está configurada en appsettings.json.");
     }
 
     // ── GET ALL (paginado) ────────────────────────────────────────────────
 
-    public async Task<(IEnumerable<Geespecial> Items, int Total)> GetAllAsync(GeespecialFilter filter)
+    public async Task<(IEnumerable<Adzonifica> Items, int Total)> GetAllAsync(AdzonificaFilter filter)
     {
         var (where, paramValues) = BuildWhere(filter);
 
@@ -38,7 +38,7 @@ public class GeespecialRepository : IGeespecialRepository
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
 
-        var sqlCount = $"SELECT COUNT(*) FROM Geespecial {where}";
+        var sqlCount = $"SELECT COUNT(*) FROM Adzonifica {where}";
         var total = await ExecuteScalarAsync(conn, sqlCount, MakeParams(paramValues));
 
         if (total == 0)
@@ -51,24 +51,24 @@ public class GeespecialRepository : IGeespecialRepository
         {
             sqlData = $@"
                 SELECT TOP {tamPagina} {SelectColumns()}
-                FROM   Geespecial
+                FROM   Adzonifica
                 {where}
-                ORDER BY Geespecodi";
+                ORDER BY Adpaciiden, Geunprcodi";
             queryValues = paramValues;
         }
         else
         {
             sqlData = $@"
                 SELECT TOP {tamPagina} {SelectColumns()}
-                FROM   Geespecial
+                FROM   Adzonifica
                 {where}
-                AND    Geespecodi NOT IN (
-                           SELECT TOP {offset} Geespecodi
-                           FROM   Geespecial
+                AND    ALLTRIM(Adpaciiden)+ALLTRIM(Geunprcodi) NOT IN (
+                           SELECT TOP {offset} ALLTRIM(Adpaciiden)+ALLTRIM(Geunprcodi)
+                           FROM   Adzonifica
                            {where}
-                           ORDER BY Geespecodi
+                           ORDER BY Adpaciiden, Geunprcodi
                        )
-                ORDER BY Geespecodi";
+                ORDER BY Adpaciiden, Geunprcodi";
             queryValues = [.. paramValues, .. paramValues];
         }
 
@@ -76,31 +76,47 @@ public class GeespecialRepository : IGeespecialRepository
         return (items, total);
     }
 
-    // ── GET BY CODE ───────────────────────────────────────────────────────
+    // ── GET BY PACIENTE ───────────────────────────────────────────────────
 
-    public async Task<Geespecial?> GetByCodeAsync(string geespecodi)
+    public async Task<IEnumerable<Adzonifica>> GetByPacienteAsync(string adpaciiden)
     {
         var sql = $@"
             SELECT {SelectColumns()}
-            FROM   Geespecial
-            WHERE  ALLTRIM(Geespecodi) = ?";
+            FROM   Adzonifica
+            WHERE  ALLTRIM(Adpaciiden) = ?
+            ORDER BY Geunprcodi";
 
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
 
-        var items = await QueryAsync(conn, sql, MakeParams([geespecodi.Trim()]));
+        return await QueryAsync(conn, sql, MakeParams([adpaciiden.Trim()]));
+    }
+
+    // ── GET BY PACIENTE + ZONA (clave compuesta) ──────────────────────────
+
+    public async Task<Adzonifica?> GetByPacienteYZonaAsync(string adpaciiden, string geunprcodi)
+    {
+        var sql = $@"
+            SELECT {SelectColumns()}
+            FROM   Adzonifica
+            WHERE  ALLTRIM(Adpaciiden) = ?
+            AND    ALLTRIM(Geunprcodi) = ?";
+
+        using var conn = new OleDbConnection(_conn);
+        await conn.OpenAsync();
+
+        var items = await QueryAsync(conn, sql,
+            MakeParams([adpaciiden.Trim(), geunprcodi.Trim()]));
         return items.FirstOrDefault();
     }
 
     // ── CREATE ────────────────────────────────────────────────────────────
 
-    public async Task<Geespecial> CreateAsync(Geespecial e)
+    public async Task<Adzonifica> CreateAsync(Adzonifica e)
     {
         const string sql = @"
-            INSERT INTO Geespecial (
-                Geespecodi, Geespenomb,
-                Geespesv18, Geespeodon, Hcrevartip, Geespechbx
-            ) VALUES (?,?,?,?,?,?)";
+            INSERT INTO Adzonifica (Adpaciiden, Geunprcodi, Estado)
+            VALUES (?, ?, ?)";
 
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
@@ -110,13 +126,13 @@ public class GeespecialRepository : IGeespecialRepository
 
     // ── UPDATE ────────────────────────────────────────────────────────────
 
-    public async Task<Geespecial> UpdateAsync(Geespecial e)
+    public async Task<Adzonifica> UpdateAsync(Adzonifica e)
     {
         const string sql = @"
-            UPDATE Geespecial SET
-                Geespenomb = ?,
-                Geespesv18 = ?, Geespeodon = ?, Hcrevartip = ?, Geespechbx = ?
-            WHERE ALLTRIM(Geespecodi) = ?";
+            UPDATE Adzonifica SET
+                Estado = ?
+            WHERE ALLTRIM(Adpaciiden) = ?
+            AND   ALLTRIM(Geunprcodi) = ?";
 
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
@@ -126,31 +142,40 @@ public class GeespecialRepository : IGeespecialRepository
 
     // ── DELETE ────────────────────────────────────────────────────────────
 
-    public async Task<bool> DeleteAsync(string geespecodi)
+    public async Task<bool> DeleteAsync(string adpaciiden, string geunprcodi)
     {
-        const string sql = "DELETE FROM Geespecial WHERE ALLTRIM(Geespecodi) = ?";
+        const string sql = @"
+            DELETE FROM Adzonifica
+            WHERE ALLTRIM(Adpaciiden) = ?
+            AND   ALLTRIM(Geunprcodi) = ?";
 
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
-        return await ExecuteAsync(conn, sql, MakeParams([geespecodi.Trim()])) > 0;
+        return await ExecuteAsync(conn, sql,
+            MakeParams([adpaciiden.Trim(), geunprcodi.Trim()])) > 0;
     }
 
     // ── BUILD WHERE ───────────────────────────────────────────────────────
 
-    private static (string Where, object[] Values) BuildWhere(GeespecialFilter f)
+    private static (string Where, object[] Values) BuildWhere(AdzonificaFilter f)
     {
-        var sb = new StringBuilder("WHERE 1=1 AND geespechbx=1");
+        var sb = new StringBuilder("WHERE 1=1");
         var values = new List<object>();
 
-        if (!string.IsNullOrWhiteSpace(f.Geespecodi))
+        if (!string.IsNullOrWhiteSpace(f.Adpaciiden))
         {
-            sb.Append(" AND ALLTRIM(Geespecodi) = ?");
-            values.Add(f.Geespecodi.Trim());
+            sb.Append(" AND ALLTRIM(Adpaciiden) = ?");
+            values.Add(f.Adpaciiden.Trim());
         }
-        if (!string.IsNullOrWhiteSpace(f.Geespenomb))
+        if (!string.IsNullOrWhiteSpace(f.Geunprcodi))
         {
-            sb.Append(" AND UPPER(ALLTRIM(Geespenomb)) LIKE ?");
-            values.Add($"%{f.Geespenomb.ToUpper().Trim()}%");
+            sb.Append(" AND ALLTRIM(Geunprcodi) = ?");
+            values.Add(f.Geunprcodi.Trim());
+        }
+        if (f.Estado.HasValue)
+        {
+            sb.Append(" AND Estado = ?");
+            values.Add(f.Estado.Value);
         }
 
         return (sb.ToString(), values.ToArray());
@@ -158,26 +183,20 @@ public class GeespecialRepository : IGeespecialRepository
 
     // ── VALORES INSERT / UPDATE ───────────────────────────────────────────
 
-    private static object[] InsertValues(Geespecial e) =>
+    private static object[] InsertValues(Adzonifica e) =>
     [
-        e.Geespecodi ?? (object)DBNull.Value,
-        e.Geespenomb ?? (object)DBNull.Value,
-        e.Geespesv18.HasValue  ? e.Geespesv18.Value  : (object)DBNull.Value,
-        e.Geespeodon.HasValue  ? e.Geespeodon.Value  : (object)DBNull.Value,
-        e.Hcrevartip.HasValue  ? e.Hcrevartip.Value  : (object)DBNull.Value,
-        e.geespechbx.HasValue  ? e.geespechbx.Value  : (object)DBNull.Value,
+        e.Adpaciiden,
+        e.Geunprcodi,
+        e.Estado.HasValue ? e.Estado.Value : (object)DBNull.Value,
     ];
 
-    private static object[] UpdateValues(Geespecial e) =>
+    private static object[] UpdateValues(Adzonifica e) =>
     [
-        // SET (sin Geespecodi — es la clave, no se actualiza)
-        e.Geespenomb ?? (object)DBNull.Value,
-        e.Geespesv18.HasValue  ? e.Geespesv18.Value  : (object)DBNull.Value,
-        e.Geespeodon.HasValue  ? e.Geespeodon.Value  : (object)DBNull.Value,
-        e.Hcrevartip.HasValue  ? e.Hcrevartip.Value  : (object)DBNull.Value,
-        e.geespechbx.HasValue  ? e.geespechbx.Value  : (object)DBNull.Value,
-        // WHERE
-        e.Geespecodi ?? (object)DBNull.Value,
+        // SET
+        e.Estado.HasValue ? e.Estado.Value : (object)DBNull.Value,
+        // WHERE (clave compuesta)
+        e.Adpaciiden,
+        e.Geunprcodi,
     ];
 
     // ── ADO.NET HELPERS ───────────────────────────────────────────────────
@@ -202,13 +221,13 @@ public class GeespecialRepository : IGeespecialRepository
         return await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task<List<Geespecial>> QueryAsync(
+    private static async Task<List<Adzonifica>> QueryAsync(
         OleDbConnection conn, string sql, OleDbParameter[] p)
     {
         using var cmd = new OleDbCommand(sql, conn);
         cmd.Parameters.AddRange(p);
 
-        var list = new List<Geespecial>();
+        var list = new List<Adzonifica>();
         using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
             list.Add(MapRow(reader));
@@ -218,9 +237,9 @@ public class GeespecialRepository : IGeespecialRepository
 
     // ── Safe helpers por ordinal ──────────────────────────────────────────
 
-    private static int? SafeInt(IDataRecord r, int i)
+    private static double? SafeDouble(IDataRecord r, int i)
     {
-        try { return r.IsDBNull(i) ? null : (int?)Convert.ToInt32(r.GetValue(i)); }
+        try { return r.IsDBNull(i) ? null : (double?)Convert.ToDouble(r.GetValue(i)); }
         catch { return null; }
     }
 
@@ -230,22 +249,16 @@ public class GeespecialRepository : IGeespecialRepository
         catch { return string.Empty; }
     }
 
-    private static Geespecial MapRow(IDataRecord r)
+    private static Adzonifica MapRow(IDataRecord r)
     {
-        // 0:Geespecodi  1:Geespenomb  2:Geespesv18
-        // 3:Geespeodon  4:Hcrevartip  5:Geespechbx
-        return new Geespecial
+        // 0:Adpaciiden  1:Geunprcodi  2:Estado
+        return new Adzonifica
         {
-            Geespecodi = SafeString(r, 0),
-            Geespenomb = SafeString(r, 1),
-            Geespesv18 = SafeInt(r, 2),
-            Geespeodon = SafeInt(r, 3),
-            Hcrevartip = SafeInt(r, 4),
-            geespechbx = SafeInt(r, 5),
+            Adpaciiden = SafeString(r, 0),
+            Geunprcodi = SafeString(r, 1),
+            Estado = SafeDouble(r, 2),
         };
     }
 
-    private static string SelectColumns() => @"
-        Geespecodi, Geespenomb,
-        Geespesv18, Geespeodon, Hcrevartip, Geespechbx";
+    private static string SelectColumns() => "Adpaciiden, Geunprcodi, Estado";
 }

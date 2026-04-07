@@ -1,4 +1,5 @@
-﻿using System.Data.OleDb;
+﻿using System.Data;
+using System.Data.OleDb;
 using System.Text;
 using MedisoftAPI.Domain.Entities.Citas;
 using MedisoftAPI.Domain.Interfaces.Citas;
@@ -7,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 namespace MedisoftAPI.Infrastructure.Repositories.Citas;
 
 /// <summary>
-/// Repositorio de Addispmed — tabla: Addispmed
+/// Repositorio de Addispmed — tabla: Addispmed (citas.dbc)
 ///
 /// ⚠️ VFP/OleDb NO soporta parámetros nombrados (@param).
 ///    Se usan ? posicionales y ADO.NET directo.
@@ -20,6 +21,7 @@ public class AddispmedRepository : IAddispmedRepository
 
     public AddispmedRepository(IConfiguration cfg)
     {
+        // ✅ citas.dbc → FoxPro_Cit  (NO FoxPro_Adm)
         _conn = cfg.GetConnectionString("FoxPro_Cit")
             ?? throw new InvalidOperationException(
                 "La cadena 'FoxPro_Cit' no está configurada en appsettings.json.");
@@ -38,14 +40,12 @@ public class AddispmedRepository : IAddispmedRepository
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
 
-        // ── Conteo total ──────────────────────────────────────────
         var sqlCount = $"SELECT COUNT(*) FROM Addispmed {where}";
         var total = await ExecuteScalarAsync(conn, sqlCount, MakeParams(paramValues));
 
         if (total == 0)
             return ([], 0);
 
-        // ── Query paginada ────────────────────────────────────────
         string sqlData;
         object[] queryValues;
 
@@ -55,7 +55,7 @@ public class AddispmedRepository : IAddispmedRepository
                 SELECT TOP {tamPagina} {SelectColumns()}
                 FROM   Addispmed
                 {where}
-                ORDER BY Addispcons ASC";
+                ORDER BY Addispfech, Adhoraini ASC";
             queryValues = paramValues;
         }
         else
@@ -68,9 +68,9 @@ public class AddispmedRepository : IAddispmedRepository
                            SELECT TOP {offset} Addispcons
                            FROM   Addispmed
                            {where}
-                           ORDER BY Addispcons ASC
+                           ORDER BY Addispfech, Adhoraini ASC
                        )
-                ORDER BY Addispcons ASC";
+                ORDER BY Addispfech, Adhoraini ASC";
             queryValues = [.. paramValues, .. paramValues];
         }
 
@@ -103,11 +103,7 @@ public class AddispmedRepository : IAddispmedRepository
                 Addispcons, Geespecodi, Gemedicodi, Faservcodi,
                 Adconscodi, Addispfech, Adhoraini,  Adhorafin,
                 Addispcita, Addispplan
-            ) VALUES (
-                ?,?,?,?,
-                ?,?,?,?,
-                ?,?
-            )";
+            ) VALUES (?,?,?,?,?,?,?,?,?,?)";
 
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
@@ -145,16 +141,17 @@ public class AddispmedRepository : IAddispmedRepository
 
     // ── BUILD WHERE ───────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Filtros base fijos: addispplan = .T. AND addispcita = .F.
-    /// Las fechas usan CTOD() — función nativa VFP para convertir string a Date.
-    /// Formato requerido por VFP: MM/dd/yyyy
-    /// Las fechas NO usan ? porque CTOD() no acepta parámetros posicionales,
-    /// se inyectan directamente formateadas (son DateTime, no input de usuario).
-    /// </summary>
     private static (string Where, object[] Values) BuildWhere(AddispmedFilter f)
     {
-        var sb = new StringBuilder("WHERE addispplan = .T. AND addispcita = .F.");
+        DateTime ahora = DateTime.Now;
+        string fechaHoy = ahora.ToString("MM/dd/yyyy");
+        string horaActual = ahora.ToString("HH:mm");
+
+        var sb = new StringBuilder(
+            $"WHERE addispplan = .T. AND addispcita = .F." +
+            $" AND (Addispfech > CTOD('{fechaHoy}')" +
+            $" OR (Addispfech = CTOD('{fechaHoy}') AND ALLTRIM(Adhoraini) >= '{horaActual}'))");
+
         var values = new List<object>();
 
         if (!string.IsNullOrWhiteSpace(f.Addispcons))
@@ -182,18 +179,10 @@ public class AddispmedRepository : IAddispmedRepository
             sb.Append(" AND ALLTRIM(Adconscodi) = ?");
             values.Add(f.Adconscodi.Trim());
         }
-
-        // ── Fechas con CTOD() — VFP no acepta DateTime como parámetro ? ──
-        // Se formatean como MM/dd/yyyy y se inyectan directamente.
-        // Son valores DateTime del sistema, no input libre del usuario.
         if (f.FechaInicio.HasValue)
-        {
             sb.Append($" AND Addispfech >= CTOD('{f.FechaInicio.Value:MM/dd/yyyy}')");
-        }
         if (f.FechaFin.HasValue)
-        {
             sb.Append($" AND Addispfech <= CTOD('{f.FechaFin.Value:MM/dd/yyyy}')");
-        }
 
         return (sb.ToString(), values.ToArray());
     }
@@ -216,7 +205,6 @@ public class AddispmedRepository : IAddispmedRepository
 
     private static object[] UpdateValues(Addispmed e) =>
     [
-        // SET (sin Addispcons — es la clave, no se actualiza)
         e.Geespecodi ?? (object)DBNull.Value,
         e.Gemedicodi ?? (object)DBNull.Value,
         e.Faservcodi ?? (object)DBNull.Value,
@@ -226,7 +214,6 @@ public class AddispmedRepository : IAddispmedRepository
         e.Adhorafin  ?? (object)DBNull.Value,
         e.Addispcita.HasValue ? e.Addispcita.Value : (object)DBNull.Value,
         e.Addispplan.HasValue ? e.Addispplan.Value : (object)DBNull.Value,
-        // WHERE
         e.Addispcons ?? (object)DBNull.Value,
     ];
 
@@ -266,19 +253,31 @@ public class AddispmedRepository : IAddispmedRepository
         return list;
     }
 
-    private static Addispmed MapRow(System.Data.IDataRecord r) => new()
+    private static string SafeString(IDataRecord r, int i)
     {
-        Addispcons = r["Addispcons"] as string,
-        Geespecodi = r["Geespecodi"] as string,
-        Gemedicodi = r["Gemedicodi"] as string,
-        Faservcodi = r["Faservcodi"] as string,
-        Adconscodi = r["Adconscodi"] as string,
-        Addispfech = r["Addispfech"] == DBNull.Value ? null : Convert.ToDateTime(r["Addispfech"]),
-        Adhoraini = r["Adhoraini"] as string,
-        Adhorafin = r["Adhorafin"] as string,
-        Addispcita = r["Addispcita"] == DBNull.Value ? null : Convert.ToBoolean(r["Addispcita"]),
-        Addispplan = r["Addispplan"] == DBNull.Value ? null : Convert.ToBoolean(r["Addispplan"]),
-    };
+        try { return r.IsDBNull(i) ? string.Empty : r.GetString(i).TrimEnd(); }
+        catch { return string.Empty; }
+    }
+
+    private static Addispmed MapRow(IDataRecord r)
+    {
+        // 0:Addispcons  1:Geespecodi  2:Gemedicodi  3:Faservcodi
+        // 4:Adconscodi  5:Addispfech  6:Adhoraini   7:Adhorafin
+        // 8:Addispcita  9:Addispplan
+        return new Addispmed
+        {
+            Addispcons = SafeString(r, 0),
+            Geespecodi = SafeString(r, 1),
+            Gemedicodi = SafeString(r, 2),
+            Faservcodi = SafeString(r, 3),
+            Adconscodi = SafeString(r, 4),
+            Addispfech = r.IsDBNull(5) ? null : (DateTime?)Convert.ToDateTime(r.GetValue(5)),
+            Adhoraini = SafeString(r, 6),
+            Adhorafin = SafeString(r, 7),
+            Addispcita = r.IsDBNull(8) ? null : (bool?)Convert.ToBoolean(r.GetValue(8)),
+            Addispplan = r.IsDBNull(9) ? null : (bool?)Convert.ToBoolean(r.GetValue(9)),
+        };
+    }
 
     private static string SelectColumns() => @"
         Addispcons, Geespecodi, Gemedicodi, Faservcodi,

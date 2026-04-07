@@ -1,5 +1,8 @@
-﻿namespace MedisoftAPI.Domain.Entities.Facturacion;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 
+namespace MedisoftAPI.Domain.Entities.Facturacion;
+
+[Table("Faprogpyp")]
 public class Faprogpyp
 {
     public string Faprogcodi { get; set; } = string.Empty;
@@ -10,6 +13,7 @@ public class Faprogpyp
     public double? Faproghast { get; set; }  // Numeric → double?
     public int? Faproggene { get; set; }  // Numeric pequeño → int?
     public int? Faprogfrec { get; set; }  // Numeric pequeño → int?
+    public int? faprogchbx { get; set; }
     public string Faficocodi { get; set; } = string.Empty;
     public string Fafisecodi { get; set; } = string.Empty;
     public string Hcformular { get; set; } = string.Empty;

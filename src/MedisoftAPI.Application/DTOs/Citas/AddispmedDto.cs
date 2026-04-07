@@ -1,6 +1,6 @@
 ﻿namespace MedisoftAPI.Application.DTOs.Citas;
 
-// ── DTO base (sin enriquecer) ─────────────────────────────────────────────
+// ── DTO base ──────────────────────────────────────────────────────────────
 public class AddispmedDto
 {
     public string? Addispcons { get; set; }
@@ -20,12 +20,13 @@ public class AddispmedDetalleDto
 {
     public string? Addispcons { get; set; }
     public string? Geespecodi { get; set; }
-    public string? Geespenomb { get; set; }   // ← nombre especialidad
+    public string? Geespenomb { get; set; }  // ← nombre especialidad
     public string? Gemedicodi { get; set; }
-    public string? Gemedinomb { get; set; }   // ← nombre médico
+    public string? Gemedinomb { get; set; }  // ← nombre médico
     public string? Faservcodi { get; set; }
-    public string? Faservnomb { get; set; }   // ← nombre servicio
+    public string? Faservnomb { get; set; }  // ← nombre servicio
     public string? Adconscodi { get; set; }
+    public string? Adconsnomb { get; set; }  // ← nombre consultorio
     public DateTime? Addispfech { get; set; }
     public string? Adhoraini { get; set; }
     public string? Adhorafin { get; set; }
@@ -41,11 +42,19 @@ public class AddispmedQueryDto
     public string? Addispcons { get; set; }
     public string? Geespecodi { get; set; }
     public string? Gemedicodi { get; set; }
+    public string? Faservcodi { get; set; }
+    public string? Adconscodi { get; set; }
     public DateTime? FechaInicio { get; set; }
     public DateTime? FechaFin { get; set; }
+    /// <summary>
+    /// Identificación del paciente. Si se envía y el parámetro
+    /// "zonifica" está activo, filtra disponibilidades por los
+    /// consultorios asociados a las unidades de producción del paciente.
+    /// </summary>
+    public string? Adpaciiden { get; set; }
 }
 
-// ── Create / Update (sin cambios) ─────────────────────────────────────────
+// ── Create / Update ───────────────────────────────────────────────────────
 public class CreateAddispmedDto
 {
     public string? Geespecodi { get; set; }

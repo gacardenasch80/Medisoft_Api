@@ -1,10 +1,13 @@
-﻿using MedisoftAPI.Application.DTOs.Facturacion;
-using MedisoftAPI.Application.Interfaces.Facturacion;
+﻿using MedisoftAPI.Application.DTOs;
+using MedisoftAPI.Application.DTOs.Facturacion;
+using MedisoftAPI.Application.Interfaces;
+using MedisoftAPI.Domain.Entities;
 using MedisoftAPI.Domain.Entities.Facturacion;
+using MedisoftAPI.Domain.Interfaces;
 using MedisoftAPI.Domain.Interfaces.Admision;
 using MedisoftAPI.Domain.Interfaces.Facturacion;
 
-namespace MedisoftAPI.Application.UseCases.Facturacion;
+namespace MedisoftAPI.Application.UseCases;
 
 public class FaprogpypService : IFaprogpypService
 {
@@ -59,8 +62,13 @@ public class FaprogpypService : IFaprogpypService
     //   faproggene=1 → solo hombres (excluye sexo='F')
     //   faproggene=2 → solo mujeres (excluye sexo='M')
 
-    public async Task<IEnumerable<FaprogpypDto>> GetByPacienteAsync(string adpaciiden)
+    public async Task<PagedResult<FaprogpypDto>> GetByPacienteAsync(
+        string adpaciiden, int pagina, int tamPagina)
     {
+        pagina = pagina < 1 ? 1 : pagina;
+        tamPagina = tamPagina < 1 ? 50 :
+                    tamPagina > 200 ? 200 : tamPagina;
+
         // 1. Buscar paciente
         var paciente = await _repoPaciente.GetByCodeAsync(adpaciiden.Trim())
             ?? throw new KeyNotFoundException(
@@ -77,15 +85,26 @@ public class FaprogpypService : IFaprogpypService
         // 3. Normalizar sexo (M/F)
         string sexo = (paciente.ADPACISEXO ?? string.Empty).Trim().ToUpper();
 
-        // 4. Traer todos los programas activos (Faprogestad no filtra aquí
-        //    para que la regla de edad/género sea la única exclusión)
+        // 4. Traer todos los programas para filtrar en memoria
+        //    (el filtro de edad/género no se puede delegar a SQL fácilmente)
         var filter = new FaprogpypFilter { Pagina = 1, TamPagina = 200 };
         var (todos, _) = await _repo.GetAllAsync(filter);
 
-        // 5. Aplicar reglas de FoxPro
-        var habilitados = todos.Where(p => AplicaAlPaciente(p, edadAnnos, sexo));
+        // 5. Aplicar reglas de FoxPro (edad + género)
+        var habilitados = todos.Where(p => AplicaAlPaciente(p, edadAnnos, sexo)).ToList();
 
-        return habilitados.Select(ToDto);
+        // 6. Paginar en memoria sobre el resultado filtrado
+        int total = habilitados.Count;
+        int offset = (pagina - 1) * tamPagina;
+        var paginaItems = habilitados.Skip(offset).Take(tamPagina);
+
+        return new PagedResult<FaprogpypDto>
+        {
+            Items = paginaItems.Select(ToDto),
+            Pagina = pagina,
+            TamPagina = tamPagina,
+            TotalItems = total,
+        };
     }
 
     /// <summary>
@@ -138,6 +157,7 @@ public class FaprogpypService : IFaprogpypService
         Faproghast = e.Faproghast,
         Faproggene = e.Faproggene,
         Faprogfrec = e.Faprogfrec,
+        faprogchbx = e.faprogchbx,
         Faficocodi = e.Faficocodi,
         Fafisecodi = e.Fafisecodi,
         Hcformular = e.Hcformular,
@@ -160,6 +180,7 @@ public class FaprogpypService : IFaprogpypService
         Faproghast = d.Faproghast,
         Faproggene = d.Faproggene,
         Faprogfrec = d.Faprogfrec,
+        faprogchbx = d.faprogchbx,
         Faficocodi = d.Faficocodi ?? string.Empty,
         Fafisecodi = d.Fafisecodi ?? string.Empty,
         Hcformular = d.Hcformular ?? string.Empty,
@@ -181,6 +202,7 @@ public class FaprogpypService : IFaprogpypService
         if (d.Faproghast is not null) e.Faproghast = d.Faproghast;
         if (d.Faproggene is not null) e.Faproggene = d.Faproggene;
         if (d.Faprogfrec is not null) e.Faprogfrec = d.Faprogfrec;
+        if (d.faprogchbx is not null) e.faprogchbx = d.faprogchbx;
         if (d.Faficocodi is not null) e.Faficocodi = d.Faficocodi;
         if (d.Fafisecodi is not null) e.Fafisecodi = d.Fafisecodi;
         if (d.Hcformular is not null) e.Hcformular = d.Hcformular;

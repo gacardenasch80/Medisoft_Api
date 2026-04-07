@@ -1,13 +1,14 @@
 using MedisoftAPI.Application.DTOs;
 using MedisoftAPI.Application.DTOs.Citas;
 using MedisoftAPI.Application.DTOs.Facturacion;
+using MedisoftAPI.Application.Interfaces;
 using MedisoftAPI.Application.Interfaces.Citas;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MedisoftAPI.WebAPI.Controllers;
 
-/// <summary>Admisión de pacientes — tabla Adcitas.DBF (admision)</summary>
+/// <summary>Citas de pacientes — tabla Adcitas.DBF (citas.dbc)</summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -19,10 +20,11 @@ public class CitasPacientesController : ControllerBase
     public CitasPacientesController(IAdcitasService service) => _service = service;
 
     /// <summary>
-    /// Listar admisiones con paginación.
+    /// Listar citas con paginación.
     /// Por defecto devuelve 50 registros por página.
     /// Parámetros opcionales: Adcitacons, Geespecodi, Gemedicodi,
-    /// Faservcodi, Adpaciiden, Adconscodi,Adfechcita, Ctadmicodi, Ctcontcodi, Adingrcons,, Pagina, TamPagina (máx 200)
+    /// Faservcodi, Adpaciiden, Adconscodi, Adfechcita, Ctadmicodi,
+    /// Ctcontcodi, Adingrcons, Pagina, TamPagina (máx 200)
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<PagedResult<AdcitasDto>>), StatusCodes.Status200OK)]
@@ -33,21 +35,21 @@ public class CitasPacientesController : ControllerBase
             $"Página {result.Pagina} de {result.TotalPaginas} — {result.TotalItems} registros en total."));
     }
 
-    /// <summary>Obtener admisión por consecutivo (Adcitacons)</summary>
-    [HttpGet("{Adcitacons}")]
+    /// <summary>Obtener cita por consecutivo (Adcitacons)</summary>
+    [HttpGet("{adcitacons}")]
     [ProducesResponseType(typeof(ApiResponse<AdcitasDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetByCode(string Adcitacons)
+    public async Task<IActionResult> GetByCode(string adcitacons)
     {
-        var item = await _service.GetByCodeAsync(Adcitacons);
+        var item = await _service.GetByCodeAsync(adcitacons);
         if (item is null)
-            return NotFound(ApiResponse<string>.Fail($"Cita '{Adcitacons}' no encontrada."));
+            return NotFound(ApiResponse<string>.Fail($"Cita '{adcitacons}' no encontrada."));
         return Ok(ApiResponse<AdcitasDto>.Ok(item));
     }
 
     /// <summary>
-    /// Obtener todas las admisiones de un paciente con contrato y administradora incluidos.
-    /// Retorna lista de admisiones enriquecidas con los objetos Ctcontrato y Ctadminist.
+    /// Obtener todas las citas de un paciente con contrato y administradora incluidos.
+    /// Retorna lista de citas enriquecidas con los objetos Ctcontrato y Ctadminist.
     /// </summary>
     [HttpGet("paciente/{adpaciiden}")]
     [ProducesResponseType(typeof(ApiResponse<IEnumerable<AdcitasDetalleDto>>), StatusCodes.Status200OK)]
@@ -69,50 +71,50 @@ public class CitasPacientesController : ControllerBase
     /// Ctadmicodi y Ctcontcodi del Adadmipaci del paciente.
     /// Al finalizar marca la disponibilidad como citada (Addispcita = true).
     /// </summary>
-    [HttpPost]
-    [ProducesResponseType(typeof(ApiResponse<AdcitasDto>), StatusCodes.Status201Created)]
+    [HttpPost("desde-disponibilidad")]
+    [ProducesResponseType(typeof(ApiResponse<AdcitasConfirmacionDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateFromDispmed([FromBody] CreateAdcitasFromDispmedDto dto)
     {
-        var created = await _service.CreateFromDispmedAsync(dto);
-        return CreatedAtAction(nameof(GetByCode),
-            new { adcitacons = created.Adcitacons },
-            ApiResponse<AdcitasDto>.Ok(created, "Cita creada correctamente."));
+        try
+        {
+            var created = await _service.CreateFromDispmedAsync(dto);
+            return CreatedAtAction(nameof(GetByCode),
+                new { adcitacons = created.Adcitacons },
+                ApiResponse<AdcitasConfirmacionDto>.Ok(created, "Cita creada correctamente."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ApiResponse<string>.Fail(ex.Message));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
     }
 
-    /// <summary>Crear nueva admisión (solo Admin)</summary>
-    //[HttpPost]
-    //[Authorize(Roles = "Admin")]
-    //[ProducesResponseType(typeof(ApiResponse<AdcitasDto>), StatusCodes.Status201Created)]
-    //public async Task<IActionResult> Create([FromBody] CreateAdcitasDto dto)
-    //{
-    //    var created = await _service.CreateAsync(dto);
-    //    return CreatedAtAction(nameof(GetByCode), new { adadpacons = created.ADADPACONS },
-    //        ApiResponse<AdcitasDto>.Ok(created, "Admisión creada."));
-    //}
-
-    /// <summary>Actualizar admisión existente (solo Admin)</summary>
-    //[HttpPut("{adadpacons}")]
+    /// <summary>Actualizar cita existente (solo Admin)</summary>
+    //[HttpPut("{adcitacons}")]
     //[Authorize(Roles = "Admin")]
     //[ProducesResponseType(typeof(ApiResponse<AdcitasDto>), StatusCodes.Status200OK)]
     //[ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
-    //public async Task<IActionResult> Update(string adadpacons, [FromBody] UpdateAdcitasDto dto)
+    //public async Task<IActionResult> Update(string adcitacons, [FromBody] UpdateAdcitasDto dto)
     //{
-    //    var updated = await _service.UpdateAsync(adadpacons, dto);
-    //    return Ok(ApiResponse<AdcitasDto>.Ok(updated, "Admisión actualizada."));
+    //    var updated = await _service.UpdateAsync(adcitacons, dto);
+    //    return Ok(ApiResponse<AdcitasDto>.Ok(updated, "Cita actualizada."));
     //}
 
-    /// <summary>Eliminar admisión (solo Admin)</summary>
-    //[HttpDelete("{adadpacons}")]
+    /// <summary>Eliminar cita (solo Admin)</summary>
+    //[HttpDelete("{adcitacons}")]
     //[Authorize(Roles = "Admin")]
     //[ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
     //[ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
-    //public async Task<IActionResult> Delete(string adadpacons)
+    //public async Task<IActionResult> Delete(string adcitacons)
     //{
-    //    var deleted = await _service.DeleteAsync(adadpacons);
+    //    var deleted = await _service.DeleteAsync(adcitacons);
     //    if (!deleted)
-    //        return NotFound(ApiResponse<string>.Fail($"Admisión '{adadpacons}' no encontrada."));
-    //    return Ok(ApiResponse<string>.Ok("ok", "Admisión eliminada."));
+    //        return NotFound(ApiResponse<string>.Fail($"Cita '{adcitacons}' no encontrada."));
+    //    return Ok(ApiResponse<string>.Ok("ok", "Cita eliminada."));
     //}
 }

@@ -151,3 +151,47 @@ public class CreateAdcitasFromDispmedDto
     /// </summary>
     public required string Tabla { get; set; }
 }
+
+/// <summary>
+/// DTO de confirmación de cita — devuelto por CreateFromDispmedAsync.
+/// Contiene todos los datos necesarios para mostrar el mensaje de confirmación.
+/// </summary>
+public class AdcitasConfirmacionDto
+{
+    /// <summary>Consecutivo de la cita generada</summary>
+    public string? Adcitacons { get; set; }
+
+    // ── Datos del paciente ────────────────────────────────────────────────
+    public string? Adpaciiden { get; set; }   // Identificación
+    public string? Adpacinomb { get; set; }   // Nombre del paciente (completo)
+
+    // ── Sede / Hospital ───────────────────────────────────────────────────
+    public string? Gehospcodi { get; set; }
+    public string? Gehospnomb { get; set; }   // "SEDE ESE HOSPITAL"
+
+    // ── Especialidad ──────────────────────────────────────────────────────
+    public string? Geespecodi { get; set; }
+    public string? Geespenomb { get; set; }   // "Medicina General"
+
+    // ── Profesional / Médico ──────────────────────────────────────────────
+    public string? Gemedicodi { get; set; }
+    public string? Gemedinomb { get; set; }   // "Pedro Perez"
+
+    // ── Servicio ──────────────────────────────────────────────────────────
+    public string? Faservcodi { get; set; }
+    public string? Faservnomb { get; set; }   // "Medicina Interna"
+
+    // ── Consultorio ───────────────────────────────────────────────────────
+    public string? Adconscodi { get; set; }   // "Consultorio xxxxx"
+    public string? Adconsnomb { get; set; }
+    // ── Fecha y hora ──────────────────────────────────────────────────────
+    public DateTime Adfechcita { get; set; }
+    /// <summary>Fecha formateada: "Martes 03 de Marzo del 2026"</summary>
+    public string FechaFormato { get; set; } = string.Empty;
+    public string? Adhorainic { get; set; }   // "8:30am"
+    public string? Adhorafina { get; set; }
+
+    // ── Programa PyP ─────────────────────────────────────────────────────
+    public string? Faprogcodi { get; set; }
+    public string? Faprognomb { get; set; } = string.Empty;
+}

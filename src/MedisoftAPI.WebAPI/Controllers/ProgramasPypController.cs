@@ -1,5 +1,6 @@
 ﻿using MedisoftAPI.Application.DTOs;
 using MedisoftAPI.Application.DTOs.Facturacion;
+using MedisoftAPI.Application.Interfaces;
 using MedisoftAPI.Application.Interfaces.Facturacion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -44,7 +45,7 @@ public class ProgramasPypController : ControllerBase
     }
 
     /// <summary>
-    /// Devuelve los programas PyP habilitados para un paciente,
+    /// Devuelve los programas PyP habilitados para un paciente (paginado),
     /// filtrando por su edad (calculada desde ADPACIFENA) y su sexo (ADPACISEXO).
     ///
     /// Reglas replicadas desde FoxPro:
@@ -53,21 +54,38 @@ public class ProgramasPypController : ControllerBase
     ///   - Faproggene = 0 → ambos sexos
     ///   - Faproggene = 1 → solo hombres (excluye pacientes con sexo 'F')
     ///   - Faproggene = 2 → solo mujeres (excluye pacientes con sexo 'M')
+    ///
+    /// Parámetros de paginación opcionales: Pagina (default 1), TamPagina (default 50, máx 200)
     /// </summary>
     [HttpGet("paciente/{adpaciiden}")]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<FaprogpypDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PagedResult<FaprogpypDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetByPaciente(string adpaciiden)
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetByPaciente(
+        string adpaciiden,
+        [FromQuery] int pagina = 1,
+        [FromQuery] int tamPagina = 50)
     {
-        var items = await _service.GetByPacienteAsync(adpaciiden);
-        var list = items.ToList();
+        try
+        {
+            var result = await _service.GetByPacienteAsync(adpaciiden, pagina, tamPagina);
 
-        if (!list.Any())
-            return NotFound(ApiResponse<string>.Fail(
-                $"No se encontraron programas PyP habilitados para el paciente '{adpaciiden}'."));
+            if (result.TotalItems == 0)
+                return NotFound(ApiResponse<string>.Fail(
+                    $"No se encontraron programas PyP habilitados para el paciente '{adpaciiden}'."));
 
-        return Ok(ApiResponse<IEnumerable<FaprogpypDto>>.Ok(list,
-            $"{list.Count} programa(s) PyP habilitado(s) para el paciente '{adpaciiden}'."));
+            return Ok(ApiResponse<PagedResult<FaprogpypDto>>.Ok(result,
+                $"Página {result.Pagina} de {result.TotalPaginas} — " +
+                $"{result.TotalItems} programa(s) PyP habilitado(s) para '{adpaciiden}'."));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ApiResponse<string>.Fail(ex.Message));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
     }
 
     /// <summary>Crear nuevo programa PyP (solo Admin)</summary>

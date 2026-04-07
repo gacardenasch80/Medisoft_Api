@@ -63,6 +63,11 @@ builder.Services.AddScoped<IAdadmipaciRepository, AdadmipaciRepository>();
 builder.Services.AddScoped<IAdcitasRepository, AdcitasRepository>();
 builder.Services.AddScoped<IConsecutivosRepository, ConsecutivosRepository>();
 builder.Services.AddScoped<IFaprogpypRepository, FaprogpypRepository>();
+builder.Services.AddScoped<IAdconsultoRepository, AdconsultoRepository>();
+builder.Services.AddScoped<IGehospitalRepository, GehospitalRepository>();
+builder.Services.AddScoped<IAdzonificaRepository, AdzonificaRepository>();
+builder.Services.AddScoped<IGeunidprodRepository, GeunidprodRepository>();
+builder.Services.AddScoped<IAdparametrosRepository, AdparametrosRepository>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IFaservicioService, FaservicioService>();
@@ -75,7 +80,11 @@ builder.Services.AddScoped<ICtcontratoService, CtcontratoService>();
 builder.Services.AddScoped<IAdadmipaciService, AdadmipaciService>();
 builder.Services.AddScoped<IAdcitasService, AdcitasService>();
 builder.Services.AddScoped<IFaprogpypService, FaprogpypService>();
-
+builder.Services.AddScoped<IAdconsultoService, AdconsultoService>();
+builder.Services.AddScoped<IGehospitalService, GehospitalService>();
+builder.Services.AddScoped<IAdzonificaService, AdzonificaService>();
+builder.Services.AddScoped<IGeunidprodService, GeunidprodService>();
+builder.Services.AddScoped<IAdparametrosService, AdparametrosService>();
 // ── 3. JWT ────────────────────────────────────────────────────────
 var jwt = builder.Configuration.GetSection("JwtSettings");
 var key = Encoding.UTF8.GetBytes(jwt["SecretKey"]!);

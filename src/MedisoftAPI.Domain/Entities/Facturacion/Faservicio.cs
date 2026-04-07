@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace MedisoftAPI.Domain.Entities.Facturacion;
 
+[Table("Faservicio")]
 /// <summary>Espejo de MedisoftCore.Entities.Faservicio — FASERVICIO.dbf</summary>
 public class Faservicio
 {

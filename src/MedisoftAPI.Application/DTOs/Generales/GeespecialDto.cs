@@ -10,6 +10,7 @@ public class GeespecialDto
     public int? Geespesv18 { get; set; }
     public int? Geespeodon { get; set; }
     public int? Hcrevartip { get; set; }
+    public int? geespechbx { get; set; }
 }
 public class CreateGeespecialDto
 {
@@ -18,6 +19,7 @@ public class CreateGeespecialDto
     public int? Geespesv18 { get; set; }
     public int? Geespeodon { get; set; }
     public int? Hcrevartip { get; set; }
+    public int? geespechbx { get; set; }
 }
 public class UpdateGeespecialDto
 {
@@ -26,6 +28,7 @@ public class UpdateGeespecialDto
     public int? Geespesv18 { get; set; }
     public int? Geespeodon { get; set; }
     public int? Hcrevartip { get; set; }
+    public int? geespechbx { get; set; }
 }
 public class GeespecialQueryDto
 {

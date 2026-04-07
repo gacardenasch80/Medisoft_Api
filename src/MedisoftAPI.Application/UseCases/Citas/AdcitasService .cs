@@ -1,23 +1,40 @@
-﻿using MedisoftAPI.Application.DTOs.Citas;
+﻿using MedisoftAPI.Application.DTOs;
+using MedisoftAPI.Application.DTOs.Citas;
 using MedisoftAPI.Application.DTOs.Contratacion;
 using MedisoftAPI.Application.DTOs.Facturacion;
+using MedisoftAPI.Application.Interfaces;
 using MedisoftAPI.Application.Interfaces.Citas;
+using MedisoftAPI.Domain.Entities;
+using MedisoftAPI.Domain.Entities.Admision;
 using MedisoftAPI.Domain.Entities.Citas;
 using MedisoftAPI.Domain.Entities.Contratacion;
+using MedisoftAPI.Domain.Entities.Facturacion;
+using MedisoftAPI.Domain.Entities.Generales;
+using MedisoftAPI.Domain.Interfaces;
 using MedisoftAPI.Domain.Interfaces.Admision;
 using MedisoftAPI.Domain.Interfaces.Citas;
 using MedisoftAPI.Domain.Interfaces.Contratacion;
+using MedisoftAPI.Domain.Interfaces.Facturacion;
+using MedisoftAPI.Domain.Interfaces.Generales;
 
-namespace MedisoftAPI.Application.UseCases.Citas;
+namespace MedisoftAPI.Application.UseCases;
 
 public class AdcitasService : IAdcitasService
 {
     private readonly IAdcitasRepository _repo;
     private readonly ICtcontratoRepository _contratos;
     private readonly ICtadministRepository _admins;
-    private readonly IConsecutivosRepository _consecutivos; 
-    private readonly IAddispmedRepository _addispmed;   
+    private readonly IConsecutivosRepository _consecutivos;
+    private readonly IAddispmedRepository _addispmed;
     private readonly IAdadmipaciRepository _adadmipaci;
+    // ── Para enriquecer la confirmación ──────────────────────────────────
+    private readonly IGehospitalRepository _hospitales;
+    private readonly IGeespecialRepository _especialidades;
+    private readonly IGemedicosRepository _medicos;
+    private readonly IFaservicioRepository _servicios;
+    private readonly IFaprogpypRepository _programas;
+    private readonly IAdpacienteRepository _pacientes;
+    private readonly IAdconsultoRepository _consultorios;
 
     public AdcitasService(
         IAdcitasRepository repo,
@@ -25,14 +42,28 @@ public class AdcitasService : IAdcitasService
         ICtadministRepository admins,
         IConsecutivosRepository consecutivos,
         IAddispmedRepository addispmed,
-        IAdadmipaciRepository adadmipaci)
+        IAdadmipaciRepository adadmipaci,
+        IGehospitalRepository hospitales,
+        IGeespecialRepository especialidades,
+        IGemedicosRepository medicos,
+        IFaservicioRepository servicios,
+        IFaprogpypRepository programas, 
+        IAdpacienteRepository pacientes,
+        IAdconsultoRepository consultorios)
     {
         _repo = repo;
         _contratos = contratos;
         _admins = admins;
         _consecutivos = consecutivos;
         _addispmed = addispmed;
-        _adadmipaci = adadmipaci;    
+        _adadmipaci = adadmipaci;
+        _hospitales = hospitales;
+        _especialidades = especialidades;
+        _medicos = medicos;
+        _servicios = servicios;
+        _programas = programas;
+        _pacientes = pacientes;
+        _consultorios = consultorios;
     }
 
     public async Task<PagedResult<AdcitasDto>> GetAllAsync(AdcitasQueryDto query)
@@ -102,25 +133,40 @@ public class AdcitasService : IAdcitasService
         return ToDto(await _repo.UpdateAsync(existing));
     }
 
-    public Task<bool> DeleteAsync(string adcitacons) => _repo.DeleteAsync(adcitacons);
+    public Task<bool> DeleteAsync(string adcitacons)
+        => _repo.DeleteAsync(adcitacons);
 
-    public async Task<AdcitasDto> CreateFromDispmedAsync(CreateAdcitasFromDispmedDto dto)
+    // ── CREATE FROM DISPMED ───────────────────────────────────────────────
+
+    public async Task<AdcitasConfirmacionDto> CreateFromDispmedAsync(CreateAdcitasFromDispmedDto dto)
     {
-        // ── 1. Buscar disponibilidad ───────────────────────────────────────
+        // ── 1. Buscar disponibilidad ──────────────────────────────────────
         var dispmed = await _addispmed.GetByCodeAsync(dto.Addispcons)
             ?? throw new KeyNotFoundException(
                 $"Disponibilidad '{dto.Addispcons}' no encontrada.");
+
+        if (dispmed.Addispplan != true)
+            throw new InvalidOperationException(
+                $"La disponibilidad '{dto.Addispcons}' no está activa.");
+
+        if (dispmed.Addispcita == true)
+            throw new InvalidOperationException(
+                $"La disponibilidad '{dto.Addispcons}' ya tiene una cita asignada.");
+
+        if (dispmed.Addispfech is null)
+            throw new InvalidOperationException(
+                $"La disponibilidad '{dto.Addispcons}' no tiene fecha asignada.");
 
         // ── 2. Buscar admisión del paciente ───────────────────────────────
         var admipaci = await _adadmipaci.GetByCodeAsync(dto.Adadpacons)
             ?? throw new KeyNotFoundException(
                 $"Admisión '{dto.Adadpacons}' no encontrada.");
 
-        // ── 3. Generar consecutivo (padLeft 8 igual que el legado) ────────
+        // ── 3. Generar consecutivo ────────────────────────────────────────
         string rawConsec = await _consecutivos.GetNextAsync(dto.Tabla);
         string adcitacons = rawConsec.PadLeft(8, '0');
 
-        // ── 4. Armar la entidad — misma lógica que el legado ──────────────
+        // ── 4. Armar la entidad ───────────────────────────────────────────
         var cita = new Adcitas
         {
             Adcitacons = adcitacons,
@@ -129,9 +175,7 @@ public class AdcitasService : IAdcitasService
             Faservcodi = (dispmed.Faservcodi ?? string.Empty).Trim(),
             Adpaciiden = dto.Adpaciiden.Trim(),
             Adconscodi = (dispmed.Adconscodi ?? string.Empty).Trim(),
-            Adfechcita = dispmed.Addispfech
-                ?? throw new InvalidOperationException(
-                    "El campo Addispfech de la disponibilidad está vacío."),
+            Adfechcita = dispmed.Addispfech.Value,
             Adhorainic = (dispmed.Adhoraini ?? string.Empty).Trim(),
             Adhorafina = (dispmed.Adhorafin ?? string.Empty).Trim(),
             Adduraminu = 30,
@@ -145,25 +189,115 @@ public class AdcitasService : IAdcitasService
             Adingrcons = string.Empty,
             Faorsecons = string.Empty,
             Coconscons = string.Empty,
-            Faprogcodi = dto.Faprogcodi.Trim(),
-            Fechalleg = null,           // {//} en el legado = null
+            Faprogcodi = (dto.Faprogcodi ?? string.Empty).Trim(),
+            Fechalleg = null,
             Adcodanula = string.Empty,
             Fechprefpa = dispmed.Addispfech.Value,
             Adcitaande = string.Empty,
             Geusuacoan = string.Empty,
-            Adcitafean = null,           // {//} en el legado = null
+            Adcitafean = null,
             Adciticodi = "0",
         };
 
         // ── 5. Insertar cita ──────────────────────────────────────────────
-        var creada = await _repo.CreateAsync(cita);
+        await _repo.CreateAsync(cita);
 
-        // ── 6. Marcar disponibilidad como citada (UpdateAddispmed del legado)
+        // ── 6. Marcar disponibilidad como citada ──────────────────────────
         dispmed.Addispcita = true;
         await _addispmed.UpdateAsync(dispmed);
 
-        return ToDto(creada);
+        string gehospicodi = "001";
+
+        // ── 7. Cargar datos de confirmación en paralelo ───────────────────
+        var tEspec = string.IsNullOrWhiteSpace(cita.Geespecodi)
+                        ? Task.FromResult<Geespecial?>(null)
+                        : _especialidades.GetByCodeAsync(cita.Geespecodi);
+
+        var tMedico = string.IsNullOrWhiteSpace(cita.Gemedicodi)
+                        ? Task.FromResult<Gemedicos?>(null)
+                        : _medicos.GetByCodeAsync(cita.Gemedicodi);
+
+        var tServicio = string.IsNullOrWhiteSpace(cita.Faservcodi)
+                        ? Task.FromResult<Faservicio?>(null)
+                        : _servicios.GetByCodeAsync(cita.Faservcodi);
+
+        var tHospital = string.IsNullOrWhiteSpace(gehospicodi)
+                        ? Task.FromResult<Gehospital?>(null)
+                        : _hospitales.GetByCodeAsync(gehospicodi.Trim());
+
+        var tProgramas = string.IsNullOrWhiteSpace(cita.Faprogcodi)
+                        ? Task.FromResult<Faprogpyp?>(null)
+                        : _programas.GetByCodeAsync(cita.Faprogcodi);
+
+        var tConsultorios = string.IsNullOrWhiteSpace(cita.Adconscodi)
+                        ? Task.FromResult<Adconsulto?>(null)
+                        : _consultorios.GetByCodeAsync(cita.Adconscodi);
+
+        var tPacientes = string.IsNullOrWhiteSpace(cita.Adpaciiden)
+                        ? Task.FromResult<Adpaciente?>(null)
+                        : _pacientes.GetByCodeAsync(cita.Adpaciiden);
+
+        await Task.WhenAll(tEspec, tMedico, tServicio, tHospital, tProgramas, tConsultorios, tPacientes);
+
+        // ── 8. Armar DTO de confirmación ──────────────────────────────────
+        return new AdcitasConfirmacionDto
+        {
+            Adcitacons = cita.Adcitacons,
+            Adpaciiden = cita.Adpaciiden,
+            Adpacinomb = NombreCompleto(tPacientes.Result),
+
+            Gehospcodi = tHospital.Result?.Gehospcodi?.Trim(),
+            Gehospnomb = tHospital.Result?.Gehospnomb?.Trim(),
+
+            Geespecodi = cita.Geespecodi,
+            Geespenomb = tEspec.Result?.Geespenomb?.Trim(),
+
+            Gemedicodi = cita.Gemedicodi,
+            Gemedinomb = tMedico.Result?.Gemedinomb?.Trim(),
+
+            Faservcodi = cita.Faservcodi,
+            Faservnomb = tServicio.Result?.FASERVNOMB?.Trim(),
+
+            Adconscodi = cita.Adconscodi,
+            Adconsnomb = tConsultorios.Result?.Adconsnomb?.Trim(),
+
+            Adfechcita = cita.Adfechcita,
+            FechaFormato = FormatearFecha(cita.Adfechcita),
+            Adhorainic = cita.Adhorainic,
+            Adhorafina = cita.Adhorafina,
+
+            Faprogcodi = cita.Faprogcodi,
+            Faprognomb = tProgramas.Result?.Faprognomb?.Trim(),
+        };
     }
+
+    // ── Formatear fecha en español: "Martes 03 de Marzo del 2026" ─────────
+
+    private static string FormatearFecha(DateTime fecha)
+    {
+        string[] dias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+        string[] meses = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                            "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+        return $"{dias[(int)fecha.DayOfWeek]} {fecha.Day:D2} de {meses[fecha.Month]} del {fecha.Year}";
+    }
+
+    // ── Nombre completo del paciente: Ape1 Ape2 Nom1 Nom2 ────────────────
+
+    private static string NombreCompleto(Adpaciente? p)
+    {
+        if (p is null) return string.Empty;
+        return string.Join(" ",
+            new[]
+            {
+                p.ADPACIAPE1?.Trim(),
+                p.ADPACIAPE2?.Trim(),
+                p.ADPACINOM1?.Trim(),
+                p.ADPACINOM2?.Trim(),
+            }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
+    }
+
+    // ── Mappers ───────────────────────────────────────────────────────────
 
     private static AdcitasDto ToDto(Adcitas e) => new()
     {

@@ -10,6 +10,7 @@ public class FaprogpypDto
     public double? Faproghast { get; set; }
     public int? Faproggene { get; set; }
     public int? Faprogfrec { get; set; }
+    public int? faprogchbx { get; set; }
     public string? Faficocodi { get; set; }
     public string? Fafisecodi { get; set; }
     public string? Hcformular { get; set; }
@@ -44,6 +45,7 @@ public class CreateFaprogpypDto
     public double? Faproghast { get; set; }
     public int? Faproggene { get; set; }
     public int? Faprogfrec { get; set; }
+    public int? faprogchbx { get; set; }
     public string? Faficocodi { get; set; }
     public string? Fafisecodi { get; set; }
     public string? Hcformular { get; set; }
@@ -65,6 +67,7 @@ public class UpdateFaprogpypDto
     public double? Faproghast { get; set; }
     public int? Faproggene { get; set; }
     public int? Faprogfrec { get; set; }
+    public int? faprogchbx { get; set; }
     public string? Faficocodi { get; set; }
     public string? Fafisecodi { get; set; }
     public string? Hcformular { get; set; }

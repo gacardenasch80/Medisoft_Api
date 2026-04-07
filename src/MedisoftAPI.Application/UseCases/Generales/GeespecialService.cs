@@ -1,4 +1,5 @@
-﻿using MedisoftAPI.Application.DTOs.Facturacion;
+﻿using MedisoftAPI.Application.DTOs;
+using MedisoftAPI.Application.DTOs.Facturacion;
 using MedisoftAPI.Application.Interfaces.Generales;
 using MedisoftAPI.Domain.Entities.Generales;
 using MedisoftAPI.Domain.Interfaces.Generales;
@@ -11,8 +12,6 @@ public class GeespecialService : IGeespecialService
 
     public GeespecialService(IGeespecialRepository repo) => _repo = repo;
 
-    // ── GET ALL (paginado) ────────────────────────────────────────────────
-
     public async Task<PagedResult<GeespecialDto>> GetAllAsync(GeespecialQueryDto query)
     {
         var filter = new GeespecialFilter
@@ -21,7 +20,7 @@ public class GeespecialService : IGeespecialService
             Geespenomb = query.Geespenomb,
             Pagina = query.Pagina < 1 ? 1 : query.Pagina,
             TamPagina = query.TamPagina < 1 ? 50 :
-                         query.TamPagina > 200 ? 200 : query.TamPagina
+                         query.TamPagina > 200 ? 200 : query.TamPagina,
         };
 
         var (items, total) = await _repo.GetAllAsync(filter);
@@ -31,11 +30,9 @@ public class GeespecialService : IGeespecialService
             Items = items.Select(ToDto),
             Pagina = filter.Pagina,
             TamPagina = filter.TamPagina,
-            TotalItems = total
+            TotalItems = total,
         };
     }
-
-    // ── GET BY CODE ───────────────────────────────────────────────────────
 
     public async Task<GeespecialDto?> GetByCodeAsync(string geespecodi)
     {
@@ -43,24 +40,16 @@ public class GeespecialService : IGeespecialService
         return e is null ? null : ToDto(e);
     }
 
-    // ── CREATE ────────────────────────────────────────────────────────────
-
     public async Task<GeespecialDto> CreateAsync(CreateGeespecialDto dto)
         => ToDto(await _repo.CreateAsync(FromCreate(dto)));
-
-    // ── UPDATE ────────────────────────────────────────────────────────────
 
     public async Task<GeespecialDto> UpdateAsync(string geespecodi, UpdateGeespecialDto dto)
     {
         var existing = await _repo.GetByCodeAsync(geespecodi)
-            ?? throw new KeyNotFoundException(
-                $"Especialidad '{geespecodi}' no encontrada.");
-
+            ?? throw new KeyNotFoundException($"Especialidad '{geespecodi}' no encontrada.");
         ApplyUpdate(existing, dto);
         return ToDto(await _repo.UpdateAsync(existing));
     }
-
-    // ── DELETE ────────────────────────────────────────────────────────────
 
     public Task<bool> DeleteAsync(string geespecodi)
         => _repo.DeleteAsync(geespecodi);
@@ -74,6 +63,7 @@ public class GeespecialService : IGeespecialService
         Geespesv18 = e.Geespesv18,
         Geespeodon = e.Geespeodon,
         Hcrevartip = e.Hcrevartip,
+        geespechbx = e.geespechbx,
     };
 
     private static Geespecial FromCreate(CreateGeespecialDto d) => new()
@@ -83,6 +73,7 @@ public class GeespecialService : IGeespecialService
         Geespesv18 = d.Geespesv18,
         Geespeodon = d.Geespeodon,
         Hcrevartip = d.Hcrevartip,
+        geespechbx = d.geespechbx,
     };
 
     private static void ApplyUpdate(Geespecial e, UpdateGeespecialDto d)
@@ -91,6 +82,7 @@ public class GeespecialService : IGeespecialService
         e.Geespesv18 = d.Geespesv18;
         e.Geespeodon = d.Geespeodon;
         e.Hcrevartip = d.Hcrevartip;
+        e.geespechbx = d.geespechbx;
         // Nota: Geespecodi NO se actualiza — es la clave principal
     }
 }

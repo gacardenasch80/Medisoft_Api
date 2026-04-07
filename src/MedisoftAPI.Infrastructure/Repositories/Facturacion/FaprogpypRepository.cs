@@ -1,11 +1,13 @@
 ﻿using System.Data;
 using System.Data.OleDb;
 using System.Text;
+using MedisoftAPI.Domain.Entities;
 using MedisoftAPI.Domain.Entities.Facturacion;
+using MedisoftAPI.Domain.Interfaces;
 using MedisoftAPI.Domain.Interfaces.Facturacion;
 using Microsoft.Extensions.Configuration;
 
-namespace MedisoftAPI.Infrastructure.Repositories.Facturacion;
+namespace MedisoftAPI.Infrastructure.Repositories;
 
 /// <summary>
 /// Repositorio de Faprogpyp — tabla: Faprogpyp (facturacion.dbc)
@@ -100,11 +102,11 @@ public class FaprogpypRepository : IFaprogpypRepository
         const string sql = @"
             INSERT INTO Faprogpyp (
                 Faprogcodi, Faprogcod1, Faprognomb, Faprogclas,
-                Faprogdesd, Faproghast, Faproggene, Faprogfrec,
+                Faprogdesd, Faproghast, Faproggene, Faprogfrec, Faprogchbx,
                 Faficocodi, Fafisecodi, Hcformular, Hcforprive,
                 Hcenfeprve, Hcenfectrl, Faservcodi, Famesecoco,
                 Famesecopr, Faprogestad
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
         using var conn = new OleDbConnection(_conn);
         await conn.OpenAsync();
@@ -119,7 +121,7 @@ public class FaprogpypRepository : IFaprogpypRepository
         const string sql = @"
             UPDATE Faprogpyp SET
                 Faprogcod1 = ?, Faprognomb = ?, Faprogclas = ?,
-                Faprogdesd = ?, Faproghast = ?, Faproggene = ?, Faprogfrec = ?,
+                Faprogdesd = ?, Faproghast = ?, Faproggene = ?, Faprogfrec = ?, Faprogchbx = ?,
                 Faficocodi = ?, Fafisecodi = ?, Hcformular = ?, Hcforprive = ?,
                 Hcenfeprve = ?, Hcenfectrl = ?, Faservcodi = ?, Famesecoco = ?,
                 Famesecopr = ?, Faprogestad = ?
@@ -146,7 +148,7 @@ public class FaprogpypRepository : IFaprogpypRepository
 
     private static (string Where, object[] Values) BuildWhere(FaprogpypFilter f)
     {
-        var sb = new StringBuilder("WHERE 1=1");
+        var sb = new StringBuilder("WHERE 1=1 and faprogchbx = 1");
         var values = new List<object>();
 
         if (!string.IsNullOrWhiteSpace(f.Faprogcodi))
@@ -195,6 +197,7 @@ public class FaprogpypRepository : IFaprogpypRepository
         e.Faproghast.HasValue  ? e.Faproghast.Value  : (object)DBNull.Value,
         e.Faproggene.HasValue  ? e.Faproggene.Value  : (object)DBNull.Value,
         e.Faprogfrec.HasValue  ? e.Faprogfrec.Value  : (object)DBNull.Value,
+        e.faprogchbx.HasValue  ? e.faprogchbx.Value  : (object)DBNull.Value,
         e.Faficocodi,
         e.Fafisecodi,
         e.Hcformular,
@@ -217,6 +220,7 @@ public class FaprogpypRepository : IFaprogpypRepository
         e.Faproghast.HasValue  ? e.Faproghast.Value  : (object)DBNull.Value,
         e.Faproggene.HasValue  ? e.Faproggene.Value  : (object)DBNull.Value,
         e.Faprogfrec.HasValue  ? e.Faprogfrec.Value  : (object)DBNull.Value,
+        e.faprogchbx.HasValue  ? e.faprogchbx.Value  : (object)DBNull.Value,
         e.Faficocodi,
         e.Fafisecodi,
         e.Hcformular,
@@ -291,9 +295,9 @@ public class FaprogpypRepository : IFaprogpypRepository
     {
         //  0:Faprogcodi   1:Faprogcod1   2:Faprognomb   3:Faprogclas
         //  4:Faprogdesd   5:Faproghast   6:Faproggene   7:Faprogfrec
-        //  8:Faficocodi   9:Fafisecodi  10:Hcformular  11:Hcforprive
-        // 12:Hcenfeprve  13:Hcenfectrl  14:Faservcodi  15:Famesecoco
-        // 16:Famesecopr  17:Faprogestad
+        //  8:Faprogchbx   9:Faficocodi  10:Fafisecodi  11:Hcformular
+        // 12:Hcforprive  13:Hcenfeprve  14:Hcenfectrl  15:Faservcodi
+        // 16:Famesecoco  17:Famesecopr  18:Faprogestad
         return new Faprogpyp
         {
             Faprogcodi = SafeString(r, 0),
@@ -304,22 +308,23 @@ public class FaprogpypRepository : IFaprogpypRepository
             Faproghast = SafeDouble(r, 5),
             Faproggene = SafeInt(r, 6),
             Faprogfrec = SafeInt(r, 7),
-            Faficocodi = SafeString(r, 8),
-            Fafisecodi = SafeString(r, 9),
-            Hcformular = SafeString(r, 10),
-            Hcforprive = SafeString(r, 11),
-            Hcenfeprve = SafeString(r, 12),
-            Hcenfectrl = SafeString(r, 13),
-            Faservcodi = SafeString(r, 14),
-            Famesecoco = SafeString(r, 15),
-            Famesecopr = SafeString(r, 16),
-            Faprogestad = SafeInt(r, 17),
+            faprogchbx = SafeInt(r, 8),
+            Faficocodi = SafeString(r, 9),
+            Fafisecodi = SafeString(r, 10),
+            Hcformular = SafeString(r, 11),
+            Hcforprive = SafeString(r, 12),
+            Hcenfeprve = SafeString(r, 13),
+            Hcenfectrl = SafeString(r, 14),
+            Faservcodi = SafeString(r, 15),
+            Famesecoco = SafeString(r, 16),
+            Famesecopr = SafeString(r, 17),
+            Faprogestad = SafeInt(r, 18),
         };
     }
 
     private static string SelectColumns() => @"
         Faprogcodi, Faprogcod1, Faprognomb, Faprogclas,
-        Faprogdesd, Faproghast, Faproggene, Faprogfrec,
+        Faprogdesd, Faproghast, Faproggene, Faprogfrec, Faprogchbx,
         Faficocodi, Fafisecodi, Hcformular, Hcforprive,
         Hcenfeprve, Hcenfectrl, Faservcodi, Famesecoco,
         Famesecopr, Faprogestad";

@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace MedisoftAPI.Domain.Entities.Citas
 {
+    [Table("Adcitas")]
     public class Adcitas
     {
         public string Adcitacons { get; set; }

@@ -1,6 +1,7 @@
 using MedisoftAPI.Application.DTOs;
 using MedisoftAPI.Application.DTOs.Citas;
 using MedisoftAPI.Application.DTOs.Facturacion;
+using MedisoftAPI.Application.Interfaces;
 using MedisoftAPI.Application.Interfaces.Citas;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,11 +27,19 @@ public class DisponibilidadController : ControllerBase
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<PagedResult<AddispmedDetalleDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAll([FromQuery] AddispmedQueryDto query)
     {
-        var result = await _service.GetAllAsync(query);
-        return Ok(ApiResponse<PagedResult<AddispmedDetalleDto>>.Ok(result,
-            $"Página {result.Pagina} de {result.TotalPaginas} — {result.TotalItems} registros en total."));
+        try
+        {
+            var result = await _service.GetAllAsync(query);
+            return Ok(ApiResponse<PagedResult<AddispmedDetalleDto>>.Ok(result,
+                $"Página {result.Pagina} de {result.TotalPaginas} — {result.TotalItems} registros en total."));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiResponse<string>.Fail(ex.Message));
+        }
     }
 
     /// <summary>
